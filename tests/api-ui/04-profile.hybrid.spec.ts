@@ -1,17 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, request as playwrightRequest } from '@playwright/test';
+
 import { AuthApi } from '../../src/api/authApi';
 import { UserProfileApi } from '../../src/api/userProfileApi';
 import { ProfilePage } from '../../src/pages/profilePage';
 
-/**
- * TASK 4 — гібрид API + UI
- * Див. README → Завдання 4.
- *
- * API ходить на BASE_URL (8080). UI — на UI_BASE_URL (localhost).
- * Для request у цьому проєкті baseURL = UI; абсолютний API URL:
- *   `${process.env.BASE_URL ?? 'http://localhost:8080'}/api/...`
- * або окремий APIRequestContext.
- */
+const API_BASE_URL = process.env.BASE_URL ?? 'http://localhost:8080';
 
 const credentials = {
   email: process.env.USER_EMAIL ?? 'user@example.com',
@@ -19,20 +12,74 @@ const credentials = {
 };
 
 test.describe('API + UI: update phone and verify in browser', () => {
-  test.skip('should show API-updated phone on the profile page', async ({ request, page }) => {
-    const authApi = new AuthApi(request);
-    const userProfileApi = new UserProfileApi(request);
-    const profilePage = new ProfilePage(page);
+  test('should show API-updated phone on the profile page', async ({ page }) => {
+    const apiContext = await playwrightRequest.newContext({
+      baseURL: API_BASE_URL,
+      extraHTTPHeaders: {
+        Accept: 'application/json',
+      },
+    });
 
-    // TODO: логін через API
-    // TODO: змінити телефон через PUT
-    // TODO: покласти accessToken і id у localStorage (addInitScript)
-    // TODO: відкрити профіль, зчитати телефон, порівняти з API
-    // TODO: відновити телефон
+    try {
+      const authApi = new AuthApi(apiContext);
+      const userProfileApi = new UserProfileApi(apiContext);
+      const profilePage = new ProfilePage(page);
 
-    expect(authApi).toBeDefined();
-    expect(userProfileApi).toBeDefined();
-    expect(profilePage).toBeDefined();
-    expect(credentials.email).toBeTruthy();
+      const login = await authApi.signIn(credentials);
+
+      const accessToken = login.accessToken;
+      const userId = login.id;
+
+      const originalProfile = await userProfileApi.getById(accessToken, userId);
+
+      const originalPhone = originalProfile.phone;
+
+      const newPhoneNumber = `+38067${Date.now().toString().slice(-7)}`;
+
+      try {
+        const apiPhone = await userProfileApi.updateUserProfile(accessToken, userId, {
+          email: originalProfile.email,
+          firstName: originalProfile.firstName,
+          lastName: originalProfile.lastName,
+          phone: newPhoneNumber,
+          roleName: originalProfile.roleName,
+          urlLogo: originalProfile.urlLogo,
+          status: originalProfile.status,
+        });
+
+        await page.addInitScript(
+          ({ accessToken, userId, roleName }) => {
+            localStorage.setItem('accessToken', accessToken);
+            localStorage.setItem('id', String(userId));
+            localStorage.setItem('role', roleName);
+          },
+          {
+            accessToken,
+            userId,
+            roleName: login.roleName,
+          },
+        );
+
+        await profilePage.open(userId);
+
+        const uiPhone = await profilePage.getPhoneValue();
+
+        expect(uiPhone.replace(/^\+/, '')).toBe(apiPhone.replace(/^\+/, ''));
+      } finally {
+        const currentProfile = await userProfileApi.getById(accessToken, userId);
+
+        await userProfileApi.updateUserProfile(accessToken, userId, {
+          email: currentProfile.email,
+          firstName: currentProfile.firstName,
+          lastName: currentProfile.lastName,
+          phone: originalPhone ?? '',
+          roleName: currentProfile.roleName,
+          urlLogo: currentProfile.urlLogo,
+          status: currentProfile.status,
+        });
+      }
+    } finally {
+      await apiContext.dispose();
+    }
   });
 });

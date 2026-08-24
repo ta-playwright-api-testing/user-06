@@ -1,12 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { AuthApi } from '../../src/api/authApi';
 
-/**
- * TASK 2 — POST /api/signin
- * Див. README → Завдання 2.
- *
- * Email / пароль тільки з process.env (див. playwright.config.ts + .env).
- */
+import { AuthApi } from '../../src/api/authApi';
 
 const credentials = {
   email: process.env.USER_EMAIL ?? 'user@example.com',
@@ -14,22 +8,31 @@ const credentials = {
 };
 
 test.describe('POST /api/signin', () => {
-  test.skip('should sign in and return accessToken', async ({ request }) => {
+  test('should sign in and return accessToken', async ({ request }) => {
     const authApi = new AuthApi(request);
 
-    // TODO: signIn(credentials)
-    // TODO: статус успіху, є accessToken, id, email
+    const response = await request.post('/api/signin', {
+      data: credentials,
+    });
 
-    expect(authApi).toBeDefined();
-    expect(credentials.email).toBeTruthy();
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('application/json');
+
+    const login = await authApi.signIn(credentials);
+
+    expect(login.accessToken).toBeTruthy();
+    expect(login.id).toEqual(expect.any(Number));
+    expect(login.email).toBe(credentials.email);
   });
 
-  test.skip('should reject invalid password', async ({ request }) => {
+  test('should reject invalid password', async ({ request }) => {
     const authApi = new AuthApi(request);
 
-    // TODO: signInRaw з невірним паролем
-    // TODO: статус >= 400 (не хардкодьте 401, якщо API віддає 400)
+    const response = await authApi.signInRaw({
+      email: credentials.email,
+      password: `${credentials.password}_invalid`,
+    });
 
-    expect(authApi).toBeDefined();
+    expect(response.status()).toBeGreaterThanOrEqual(400);
   });
 });

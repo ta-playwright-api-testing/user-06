@@ -1,19 +1,19 @@
 import { type Page } from '@playwright/test';
 
-/**
- * Мінімальний POM для гібридного тесту (завдання 4).
- * Уточніть локатори на реальній сторінці профілю.
- */
 export class ProfilePage {
-  constructor(private readonly page: Page) {
-    void this.page;
-  }
+  constructor(private readonly page: Page) {}
 
-  async open(_userId: number): Promise<void> {
-    throw new Error('TODO: open profile, e.g. /user/{id}/page');
+  async open(userId: number): Promise<void> {
+    await this.page.goto(`/user/${userId}/page`, {
+      waitUntil: 'domcontentloaded',
+    });
   }
 
   async getPhoneValue(): Promise<string> {
-    throw new Error('TODO: read phone from UI');
+    const phone = this.page.locator('.user-phone-data');
+
+    await phone.waitFor({ state: 'visible' });
+
+    return phone.innerText();
   }
 }
